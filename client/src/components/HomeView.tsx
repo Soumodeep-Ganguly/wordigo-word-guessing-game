@@ -58,7 +58,7 @@ export function HomeView({ onNavigate }: HomeViewProps) {
               onClick={() => onNavigate("offline-setup")}
             >
               <Gamepad2 className="h-5 w-5" />
-              🎮 Play Offline
+              Play Offline
             </Button>
 
             <Button
@@ -66,7 +66,7 @@ export function HomeView({ onNavigate }: HomeViewProps) {
               onClick={() => onNavigate("multiplayer")}
             >
               <Globe className="h-5 w-5" />
-              🌐 Multiplayer
+              Multiplayer
               {!online && <WifiOff className="ml-auto h-4 w-4 opacity-70" />}
             </Button>
             {!online && (
@@ -82,7 +82,7 @@ export function HomeView({ onNavigate }: HomeViewProps) {
                 onClick={() => onNavigate("statistics")}
               >
                 <Trophy className="h-4 w-4" />
-                📊 Statistics
+                Statistics
               </Button>
               <Button
                 variant="outline"
@@ -90,7 +90,7 @@ export function HomeView({ onNavigate }: HomeViewProps) {
                 onClick={() => onNavigate("settings")}
               >
                 <Settings className="h-4 w-4" />
-                ⚙ Settings
+                Settings
               </Button>
             </div>
 

@@ -5,3 +5,4 @@ dist-ssr/
 .env*
 *.tsbuildinfo
 .DS_Store
+hosting*

@@ -15,10 +15,12 @@ interface CreateRoomViewProps {
   onNavigate: (view: AppView) => void;
   playerName: string;
   setPlayerName: (n: string) => void;
+  /** Pre-selected game mode (set when the user picks a mode on the Multiplayer screen). */
+  initialMode?: GameMode | null;
 }
 
-export function CreateRoomView({ onNavigate, playerName, setPlayerName }: CreateRoomViewProps) {
-  const [mode, setMode] = useState<GameMode>("classic");
+export function CreateRoomView({ onNavigate, playerName, setPlayerName, initialMode }: CreateRoomViewProps) {
+  const [mode, setMode] = useState<GameMode>(initialMode ?? "classic");
   const [rounds, setRounds] = useState("5");
   const [duration, setDuration] = useState("60");
   const [maxPlayers, setMaxPlayers] = useState("4");

@@ -62,6 +62,11 @@ function scheduleTimer(room: ServerRoom, ms: number, fn: () => void, ctx: Engine
 export function toPublicState(room: ServerRoom): PublicRoomState {
   const round = room.round;
   const solvable = round && round.phase === "guessing" && round.publicChallenge;
+  // Deadlines are exposed for every timed phase so clients can render live
+  // countdowns (3-2-1 between rounds, Word Master progress bar, etc.).
+  const timedPhase =
+    round &&
+    (round.phase === "guessing" || round.phase === "countdown" || round.phase === "creating");
   return {
     roomId: room.roomId,
     players: room.players.map((p) => ({
@@ -88,6 +93,8 @@ export function toPublicState(room: ServerRoom): PublicRoomState {
           phase: round.phase,
           wordMasterId: round.wordMasterId,
           endsAt: solvable ? round.phaseEndsAt : null,
+          // Live deadline for all timed phases (guessing / countdown / creating).
+          phaseEndsAt: timedPhase ? round.phaseEndsAt : null,
           challenge: solvable ? round.publicChallenge : null,
           guessLog: round.guessLog.slice(-20),
           result: round.result,
@@ -215,6 +222,9 @@ export function beginRound(ctx: EngineContext, room: ServerRoom, roundNumber: nu
     round.phase = "creating";
     room.players.forEach((p) => (p.hasSubmittedChallenge = false));
     const wm = room.players.find((p) => p.id === wmId);
+    // Deadline is stored on the round so clients can render a draining
+    // progress bar while the Word Master composes (100% → 0%).
+    round.phaseEndsAt = Date.now() + room.settings.wordMasterTimeSec * 1000;
     ctx.broadcast(room, "round-started", {
       state: toPublicState(room),
       yourTurnToCreate: wmId,
@@ -243,13 +253,51 @@ function getRevealSet(room: ServerRoom): Set<number> {
   return anyRoom.__revealSet;
 }
 
-function applyMask(room: ServerRoom) {
+/** Per-player hint letter reveal: only the hint buyer sees the extra letter. */
+function getPlayerRevealSet(round: ServerRoundState, playerId: string): Set<number> {
+  const anyRound = round as ServerRoundState & { __playerReveals?: Record<string, Set<number>> };
+  if (!anyRound.__playerReveals) anyRound.__playerReveals = {};
+  const set = anyRound.__playerReveals[playerId] || new Set<number>();
+  anyRound.__playerReveals[playerId] = set;
+  return set;
+}
+
+/**
+ * Compute the shared/private masked words after a hint-letter reveal.
+ * The shared board only changes when the shared reveal set grows (pre-start
+ * reveals and Word Master actions); a player's hint letter is personal.
+ */
+function revealLetterForPlayer(
+  ctx: EngineContext,
+  room: ServerRoom,
+  playerId: string
+): { position: number; letter: string } | null {
   const round = room.round;
-  if (!round?.secret || !round.publicChallenge) return;
-  round.publicChallenge.maskedWord = maskedWord(
-    round.secret.word,
-    getRevealSet(room)
-  );
+  if (!round?.secret || !round.publicChallenge) return null;
+
+  const shared = getRevealSet(room);
+  const personal = getPlayerRevealSet(round, playerId);
+  const already = new Set<number>([...shared, ...personal]);
+  const pos = pickRevealableLetter(round.secret.word, already);
+  if (pos === null) return null;
+
+  personal.add(pos);
+  const letter = round.secret.word[pos];
+
+  // The buying player sees their personal masked word immediately.
+  ctx.sendToPlayer(room, playerId, "board-update", {
+    state: toPublicState(room),
+    maskedWord: maskedWord(round.secret.word, new Set([...shared, ...personal])),
+  });
+
+  // Everyone else only learns THAT a letter was revealed (fairness info),
+  // never which letter — the masked board stays untouched for them.
+  ctx.broadcast(room, "letter-revealed", {
+    state: toPublicState(room),
+    byPlayer: room.players.find((p) => p.id === playerId)?.name,
+    letter: null,
+  });
+  return { position: pos, letter };
 }
 
 function startSystemRound(ctx: EngineContext, room: ServerRoom) {
@@ -405,7 +453,34 @@ export function handleWordMasterTimeout(ctx: EngineContext, room: ServerRoom) {
   });
   round.kind = "system";
   round.wordMasterId = undefined;
+  round.phaseEndsAt = null;
   startSystemRound(ctx, room);
+}
+
+/**
+ * Word Master chooses to skip composing and let the system pick the word
+ * for their turn. Same fallback as the timeout, but voluntary and instant.
+ */
+export function useSystemWord(
+  ctx: EngineContext,
+  room: ServerRoom,
+  playerId: string
+): { ok: boolean; error?: string } {
+  const round = room.round;
+  if (!round || round.phase !== "creating" || round.kind !== "player")
+    return { ok: false, error: "Not waiting for a challenge right now." };
+  if (round.wordMasterId !== playerId)
+    return { ok: false, error: "It's not your turn to create a challenge." };
+
+  ctx.broadcast(room, "challenge-skipped", {
+    state: toPublicState(room),
+    reason: `${room.players.find((p) => p.id === playerId)?.name ?? "The Word Master"} chose a system word for this round!`,
+  });
+  round.kind = "system";
+  round.wordMasterId = undefined;
+  round.phaseEndsAt = null;
+  startSystemRound(ctx, room);
+  return { ok: true };
 }
 
 /** Word Master optionally reveals hint 2 mid-round. */
@@ -557,24 +632,16 @@ export function useHint(
 
   round.hintUsed[playerId] = true;
 
-  // Using a hint also reveals a new letter on the shared board for everyone,
-  // so hint purchases visibly help the whole room (mockup: "B _ _ _ S" → "B O _ _ S").
-  const revealed = getRevealSet(room);
-  const pos = pickRevealableLetter(round.secret.word, revealed);
-  if (pos !== null) {
-    revealed.add(pos);
-    applyMask(room);
-    const letter = round.secret.word[pos];
-    ctx.broadcast(room, "letter-revealed", {
-      state: toPublicState(room),
-      position: pos,
-      letter,
-      byPlayer: player.name,
-    });
-  }
+  // The bought letter is revealed ONLY for the buying player: their board
+  // shows the new letter, everyone else's board is untouched.
+  const reveal = revealLetterForPlayer(ctx, room, playerId);
 
   const hint = round.secret.hint2 || round.secret.hint1;
-  ctx.sendToPlayer(room, playerId, "hint-revealed-personal", { hint });
+  ctx.sendToPlayer(room, playerId, "hint-revealed-personal", {
+    hint,
+    letter: reveal?.letter ?? null,
+    position: reveal?.position ?? null,
+  });
   return { ok: true, hint };
 }
 

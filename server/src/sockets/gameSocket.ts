@@ -20,6 +20,7 @@ import {
   submitGuess,
   toPublicState,
   useHint,
+  useSystemWord,
 } from "../game/engine";
 import { MIN_PLAYERS, ServerRoom } from "../types/game";
 
@@ -145,6 +146,13 @@ export function registerGameHandlers(io: Server, socket: Socket) {
     const room = requireRoom(roomId);
     if (!room) return socket.emit("room-error", { message: "Room not found." });
     const res = submitChallenge(ctx, room, socket.id, challenge);
+    if (!res.ok) socket.emit("challenge-error", { message: res.error });
+  });
+
+  socket.on("use-system-word", ({ roomId }: { roomId?: string }) => {
+    const room = requireRoom(roomId);
+    if (!room) return socket.emit("room-error", { message: "Room not found." });
+    const res = useSystemWord(ctx, room, socket.id);
     if (!res.ok) socket.emit("challenge-error", { message: res.error });
   });
 

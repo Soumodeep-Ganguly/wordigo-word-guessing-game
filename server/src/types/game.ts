@@ -136,7 +136,8 @@ export interface RoundState {
   kind: RoundKind;
   phase: RoundPhase;
   wordMasterId?: string;
-  endsAt: number | null; // epoch ms for the active phase timer
+  endsAt: number | null; // epoch ms for the guessing timer (null until guessing)
+  phaseEndsAt: number | null; // live deadline for the current timed phase (countdown / creating / guessing)
   challenge: PublicChallenge | null;
   guessLog: GuessLogEntry[];
   result: RoundResult | null;

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Lightbulb, Sparkles } from "lucide-react";
+import { ArrowLeft, Dices, Lightbulb, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -10,6 +10,8 @@ import {
 } from "@/components/ui/select";
 import { MaskedWord } from "@/components/game/MaskedWord";
 import { CountdownTimer } from "@/components/game/CountdownTimer";
+import { LiveCountdown } from "@/components/game/LiveCountdown";
+import { DrainingProgress } from "@/components/game/DrainingProgress";
 import { GuessInput } from "@/components/game/GuessInput";
 import { PlayerList, PodiumList } from "@/components/game/PlayerList";
 import { ScoreBadge } from "@/components/game/ScoreBadge";
@@ -48,11 +50,18 @@ export function GameView({ state, myId, onNavigate }: GameViewProps) {
     hint2: "",
     difficulty: "Medium" as "Easy" | "Medium" | "Hard",
   });
+  // Personal masked board: shows MY hint letters, not other players'.
+  const [myMaskedWord, setMyMaskedWord] = useState<string | null>(null);
 
   const myPlayer = liveState.players.find((p) => p.id === myId);
   const round = liveState.round;
+  // The private "your-turn-to-create" event is sent ONLY to the Word Master's
+  // socket, so receiving it proves it's my turn — immune to stale socket ids.
+  const [myTurnRound, setMyTurnRound] = useState<number | null>(null);
   const isMyTurnToCreate =
-    round?.phase === "creating" && round?.wordMasterId === myId && round?.kind === "player";
+    round?.phase === "creating" &&
+    round?.kind === "player" &&
+    (round?.wordMasterId === myId || myTurnRound === round?.roundNumber);
 
   useEffect(() => setSoundEnabled(settings.soundEnabled), [settings.soundEnabled]);
 
@@ -71,6 +80,7 @@ export function GameView({ state, myId, onNavigate }: GameViewProps) {
       "round-started": (p) => {
         applyUpdate(p);
         setRoundResult(null);
+        setMyMaskedWord(null); // new round → fresh board
         playRoundStart();
       },
       "guessing-started": (p) => {
@@ -100,22 +110,29 @@ export function GameView({ state, myId, onNavigate }: GameViewProps) {
         playHint();
         toast.message(`💡 New hint: ${hint}`);
       },
+      // My board, updated with MY hint letters only (server sends the
+      // recomputed mask just for me).
+      "board-update": (p) => {
+        const { state, maskedWord } = p as { state: PublicRoomState; maskedWord: string };
+        applyUpdate({ state });
+        setMyMaskedWord(maskedWord);
+      },
       "hint-revealed-personal": (p) => {
-        const { hint } = p as { hint: string };
+        const { hint, letter } = p as { hint: string; letter: string | null };
         playHint();
-        toast.message(`💡 ${hint}`);
+        if (letter) {
+          toast.message(`💡 ${hint} — letter "${letter}" revealed on your board!`);
+        } else {
+          toast.message(`💡 ${hint}`);
+        }
       },
       "letter-revealed": (p) => {
-        const { state, letter, byPlayer } = p as {
-          state: PublicRoomState; letter: string; byPlayer: string;
-        };
+        const { state, byPlayer } = p as { state: PublicRoomState; byPlayer?: string };
         applyUpdate({ state });
         playHint();
-        if (byPlayer === myPlayer?.name) {
-          toast.message(`💡 Hint used — letter "${letter}" revealed!`);
-        } else {
-          toast.message(`💡 ${byPlayer} used a hint — letter "${letter}" revealed!`);
-        }
+        // The letter itself is private to the buyer — others just learn a
+        // hint was purchased, never which letter appeared.
+        toast.message(`💡 ${byPlayer || "A player"} used a hint`);
       },
       "round-ended": (p) => {
         const { state, result } = p as { state: PublicRoomState; result: RoundResult };
@@ -142,8 +159,9 @@ export function GameView({ state, myId, onNavigate }: GameViewProps) {
         toast.message(reason);
       },
       "your-turn-to-create": (p) => {
-        const { deadlineAt } = p as { deadlineAt: number };
+        const { deadlineAt, roundNumber } = p as { deadlineAt: number; roundNumber?: number };
         setCreateDeadline(deadlineAt);
+        if (roundNumber) setMyTurnRound(roundNumber);
         toast.message("✏️ Your turn to create a challenge!");
       },
       "guess-error": (p) => setGuessError((p as { message: string }).message),
@@ -178,6 +196,11 @@ export function GameView({ state, myId, onNavigate }: GameViewProps) {
 
   const useMyHint = () => {
     socket.emit("use-hint", { roomId: liveState.roomId });
+  };
+
+  const useSystemWord = () => {
+    setChallengeError(null);
+    socket.emit("use-system-word", { roomId: liveState.roomId });
   };
 
   const revealHint2 = () => {
@@ -230,6 +253,7 @@ export function GameView({ state, myId, onNavigate }: GameViewProps) {
                 )}
               </div>
 
+              {/* Add your own word and hints — or fall back to a system word */}
               <div className="space-y-1.5">
                 <Label className="text-white/90">Secret word</Label>
                 <Input
@@ -302,6 +326,15 @@ export function GameView({ state, myId, onNavigate }: GameViewProps) {
               {challengeError && (
                 <p className="text-sm font-semibold text-destructive">{challengeError}</p>
               )}
+
+              {/* Option: skip composing and let the system pick the word */}
+              <Button
+                variant="outline"
+                className="h-11 w-full border-dashed"
+                onClick={useSystemWord}
+              >
+                <Dices className="h-4 w-4" /> Use a system word for this turn
+              </Button>
 
               <div className="flex gap-2">
                 <Button variant="outline" className="h-11 flex-1" onClick={leave}>
@@ -415,11 +448,11 @@ export function GameView({ state, myId, onNavigate }: GameViewProps) {
           </div>
         </div>
 
-        {/* Countdown between rounds */}
+        {/* Countdown between rounds: live 3... 2... 1... */}
         {round.phase === "countdown" && (
           <Card className="border-white/20 bg-black/20 text-white backdrop-blur">
             <CardContent className="p-8 text-center">
-              <div className="text-4xl font-black anim-pop-in">3...</div>
+              <LiveCountdown endsAt={round.phaseEndsAt} />
               <p className="mt-2 text-sm text-white/80">Get ready!</p>
             </CardContent>
           </Card>
@@ -436,9 +469,7 @@ export function GameView({ state, myId, onNavigate }: GameViewProps) {
                   "A player"}{" "}
               is creating a challenge...
               </p>
-              <div className="mx-auto mt-3 h-1.5 w-40 overflow-hidden rounded-full bg-white/20">
-                <div className="h-full w-1/2 animate-pulse rounded-full bg-white/60" />
-              </div>
+              <DrainingProgress endsAt={round.phaseEndsAt} />
             </CardContent>
           </Card>
         )}
@@ -475,7 +506,9 @@ export function GameView({ state, myId, onNavigate }: GameViewProps) {
                 <MaskedWord
                   maskedWord={round.phase === "round-end" && round.result
                     ? round.result.word.split("").join(" ")
-                    : challenge.maskedWord}
+                    : (amIWordMaster || myMaskedWord === null
+                      ? challenge.maskedWord
+                      : myMaskedWord)}
                   revealed={round.phase === "round-end"}
                 />
 

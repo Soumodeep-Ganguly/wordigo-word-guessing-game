@@ -14,7 +14,7 @@ import { toast } from "sonner";
 import { socket } from "./lib/socket";
 import { loadSettings } from "./lib/offline-game";
 import { initAudio } from "./lib/sounds";
-import { PublicRoomState } from "./types/game";
+import { GameMode, PublicRoomState } from "./types/game";
 
 function WordigoApp() {
   const [currentView, setCurrentView] = useState<AppView>("home");
@@ -23,6 +23,8 @@ function WordigoApp() {
   const [roomState, setRoomState] = useState<PublicRoomState | null>(null);
   const [myId, setMyId] = useState(socket.id || "");
   const [offlineConfig, setOfflineConfig] = useState<OfflineConfig | null>(null);
+  // Mode picked on the Multiplayer screen — auto-selected in Create Room.
+  const [selectedMode, setSelectedMode] = useState<GameMode | null>(null);
 
   // Theme bootstrap
   useEffect(() => {
@@ -33,6 +35,9 @@ function WordigoApp() {
   // Track my socket id (reconnects change it)
   useEffect(() => {
     const update = () => setMyId(socket.id || "");
+    // Catch connections that completed before this effect registered —
+    // otherwise myId stays "" and identity checks (host/word master) break.
+    update();
     socket.on("connect", update);
     return () => {
       socket.off("connect", update);
@@ -125,12 +130,15 @@ function WordigoApp() {
       )}
       {currentView === "statistics" && <StatisticsView onNavigate={setCurrentView} />}
       {currentView === "settings" && <SettingsView onNavigate={setCurrentView} />}
-      {currentView === "multiplayer" && <MultiplayerView onNavigate={setCurrentView} />}
+      {currentView === "multiplayer" && (
+        <MultiplayerView onNavigate={setCurrentView} onSelectMode={setSelectedMode} />
+      )}
       {currentView === "create-room" && (
         <CreateRoomView
           onNavigate={setCurrentView}
           playerName={playerName}
           setPlayerName={setPlayerName}
+          initialMode={selectedMode}
         />
       )}
       {currentView === "join-room" && (

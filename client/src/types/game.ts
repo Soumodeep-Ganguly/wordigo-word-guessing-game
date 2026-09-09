@@ -131,6 +131,8 @@ export interface RoundState {
   phase: RoundPhase;
   wordMasterId?: string;
   endsAt: number | null;
+  /** Live deadline for all timed phases (guessing / countdown / creating). */
+  phaseEndsAt: number | null;
   challenge: PublicChallenge | null;
   guessLog: GuessLogEntry[];
   result: RoundResult | null;
