@@ -7,6 +7,8 @@ export interface ChallengeInput {
   hint1: string;
   hint2?: string;
   difficulty: Difficulty;
+  /** Positions (0-based) the Word Master chose to reveal at round start. */
+  revealedPositions?: number[];
 }
 
 export interface ValidationResult {
@@ -18,6 +20,10 @@ export interface ValidationResult {
 const WORD_MIN_LEN = 3;
 const WORD_MAX_LEN = 15;
 const HINT_MAX_LEN = 120;
+/** How many letters the Word Master may pre-reveal: max half the word, always keeping 2 hidden. */
+export function maxRevealablePositions(wordLength: number): number {
+  return Math.max(0, Math.floor(wordLength / 2) - 1);
+}
 const CATEGORIES = [
   "Animals", "Food", "Movies", "Sports", "Countries",
   "Technology", "Nature", "General",
@@ -73,6 +79,25 @@ export function validateChallenge(
   if (!CATEGORIES.includes(category))
     return { ok: false, error: "Please pick a valid category." };
 
+  // Optional starting-letter picker: sanitize client-supplied positions.
+  let revealedPositions: number[] | undefined;
+  const rawPositions = input.revealedPositions;
+  if (Array.isArray(rawPositions) && rawPositions.length > 0) {
+    const seen = new Set<number>();
+    for (const p of rawPositions) {
+      const idx = typeof p === "number" ? Math.floor(p) : NaN;
+      if (Number.isNaN(idx) || idx < 0 || idx >= word.length || seen.has(idx))
+        return { ok: false, error: "Invalid starting letter selection." };
+      seen.add(idx);
+    }
+    if (seen.size > maxRevealablePositions(word.length))
+      return {
+        ok: false,
+        error: `You can reveal at most ${maxRevealablePositions(word.length)} starting letters (at least 2 must stay hidden).`,
+      };
+    revealedPositions = [...seen].sort((a, b) => a - b);
+  }
+
   return {
     ok: true,
     value: {
@@ -81,6 +106,7 @@ export function validateChallenge(
       hint1,
       hint2: hint2 || undefined,
       difficulty,
+      revealedPositions,
     },
   };
 }

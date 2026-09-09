@@ -9,12 +9,14 @@ import { createRoom, addPlayer, getRoom, sanitizeSettings } from "../src/rooms/r
 import {
   startMatch,
   beginRound,
+  submitChallenge,
   submitGuess,
   endRound,
   useHint,
   toPublicState,
   EngineContext,
 } from "../src/game/engine";
+import { validateChallenge, maxRevealablePositions } from "../src/game/challenge";
 import type { PublicRoomState } from "../src/types/game";
 
 let httpServer: ReturnType<typeof createServer>;
@@ -356,6 +358,77 @@ describe("multiplayer over sockets", () => {
     beginRound(ctx, room, 4);
     expect(room.round!.kind).toBe("player");
     expect(room.round!.wordMasterId).toBe("mix-p2"); // second player gets their turn
+  });
+
+  it("challenge validation: starting-letter picker rules", () => {
+    const prev = new Set<string>();
+
+    // Valid pick: 2 positions of a 8-letter word (max = 4-1 = 3).
+    const ok = validateChallenge(
+      { word: "TESTWORD", category: "General", difficulty: "Easy", hint1: "a hint", revealedPositions: [0, 3] },
+      prev
+    );
+    expect(ok.ok).toBe(true);
+    expect(ok.value?.revealedPositions).toEqual([0, 3]);
+
+    // No pick → undefined (system fallback).
+    const none = validateChallenge(
+      { word: "TESTWORD", category: "General", difficulty: "Easy", hint1: "a hint" },
+      prev
+    );
+    expect(none.ok).toBe(true);
+    expect(none.value?.revealedPositions).toBeUndefined();
+
+    // Out of range / duplicates rejected.
+    const oob = validateChallenge(
+      { word: "TESTWORD", category: "General", difficulty: "Easy", hint1: "a hint", revealedPositions: [0, 99] },
+      prev
+    );
+    expect(oob.ok).toBe(false);
+    const dup = validateChallenge(
+      { word: "TESTWORD", category: "General", difficulty: "Easy", hint1: "a hint", revealedPositions: [1, 1] },
+      prev
+    );
+    expect(dup.ok).toBe(false);
+
+    // Too many revealed: 5 for a 8-letter word (max 3) must fail.
+    const tooMany = validateChallenge(
+      { word: "TESTWORD", category: "General", difficulty: "Easy", hint1: "a hint", revealedPositions: [0, 1, 2, 3, 4] },
+      prev
+    );
+    expect(tooMany.ok).toBe(false);
+    expect(tooMany.error).toMatch(/at least 2/i);
+
+    // Max for a 3-letter word is 0 — any pick rejected.
+    expect(maxRevealablePositions(3)).toBe(0);
+    const tiny = validateChallenge(
+      { word: "CAT", category: "Animals", difficulty: "Easy", hint1: "a pet", revealedPositions: [0] },
+      prev
+    );
+    expect(tiny.ok).toBe(false);
+  });
+
+  it("engine-level: word master picks which letters are visible at start", async () => {
+    const room = createRoom(
+      { id: "wm-reveal", name: "A" },
+      { rounds: 1, mode: "player-words", wordMasterTimeSec: 30 }
+    );
+    addPlayer(room, "wm-reveal", "A");
+    addPlayer(room, "wm-p2", "B");
+    const ctx = testCtx();
+
+    startMatch(ctx, room);
+    const res = submitChallenge(ctx, room, "wm-reveal", {
+      word: "ELEPHANT",
+      category: "Animals",
+      difficulty: "Easy",
+      hint1: "The largest land animal",
+      revealedPositions: [0, 7], // E.....T
+    });
+    expect(res.ok).toBe(true);
+    expect(room.round!.phase).toBe("countdown");
+    // Only the chosen positions are revealed; the rest hidden.
+    expect(room.round!.publicChallenge!.maskedWord).toBe("E _ _ _ _ _ _ T");
   });
 
   it("engine-level: rate limiting blocks rapid-fire guesses", async () => {

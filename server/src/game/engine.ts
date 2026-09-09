@@ -420,8 +420,12 @@ function validateAndStore(
     createdById: wordMasterId,
     createdAt: Date.now(),
   };
-  // Pre-reveal a few letters for player-created words too.
-  const reveal = pickRevealedLetters(v.word, v.difficulty);
+  // Starting letters: honor the Word Master's explicit pick, otherwise use
+  // the deterministic difficulty-based reveal. Positions were sanitized by
+  // validateChallenge (unique, in range, at most half-1 → 2 letters hidden).
+  const reveal = v.revealedPositions && v.revealedPositions.length > 0
+    ? new Set(v.revealedPositions)
+    : pickRevealedLetters(v.word, v.difficulty);
   (room as ServerRoom & { __revealSet?: Set<number> }).__revealSet = reveal;
   round.publicChallenge = {
     roundKind: "player",

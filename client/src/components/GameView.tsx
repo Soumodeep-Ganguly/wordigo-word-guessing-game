@@ -12,6 +12,7 @@ import { MaskedWord } from "@/components/game/MaskedWord";
 import { CountdownTimer } from "@/components/game/CountdownTimer";
 import { LiveCountdown } from "@/components/game/LiveCountdown";
 import { DrainingProgress } from "@/components/game/DrainingProgress";
+import { StartingLettersPicker } from "@/components/game/StartingLettersPicker";
 import { GuessInput } from "@/components/game/GuessInput";
 import { PlayerList, PodiumList } from "@/components/game/PlayerList";
 import { ScoreBadge } from "@/components/game/ScoreBadge";
@@ -49,6 +50,8 @@ export function GameView({ state, myId, onNavigate }: GameViewProps) {
     hint1: "",
     hint2: "",
     difficulty: "Medium" as "Easy" | "Medium" | "Hard",
+    /** Positions in the word revealed to guessers at round start (Word Master's pick). */
+    revealedPositions: [] as number[],
   });
   // Personal masked board: shows MY hint letters, not other players'.
   const [myMaskedWord, setMyMaskedWord] = useState<string | null>(null);
@@ -217,6 +220,10 @@ export function GameView({ state, myId, onNavigate }: GameViewProps) {
         hint1: challengeForm.hint1,
         hint2: challengeForm.hint2 || undefined,
         difficulty: challengeForm.difficulty,
+        revealedPositions:
+          challengeForm.revealedPositions.length > 0
+            ? challengeForm.revealedPositions
+            : undefined,
       },
     });
   };
@@ -258,12 +265,30 @@ export function GameView({ state, myId, onNavigate }: GameViewProps) {
                 <Label className="text-white/90">Secret word</Label>
                 <Input
                   value={challengeForm.word}
-                  onChange={(e) => setChallengeForm({ ...challengeForm, word: e.target.value })}
+                  onChange={(e) =>
+                    setChallengeForm({
+                      ...challengeForm,
+                      word: e.target.value,
+                      // Word changed → previous letter picks no longer apply.
+                      revealedPositions: [],
+                    })
+                  }
                   placeholder="e.g. DOLPHIN"
                   maxLength={15}
                   className="h-11 bg-white/10 border-white/30 text-white uppercase"
                 />
               </div>
+
+              {/* Starting letters: choose which positions guessers see at first */}
+              {challengeForm.word.trim().length >= 3 && (
+                <StartingLettersPicker
+                  word={challengeForm.word.toUpperCase().replace(/[^A-Z]/g, "")}
+                  selected={challengeForm.revealedPositions}
+                  onChange={(revealedPositions) =>
+                    setChallengeForm({ ...challengeForm, revealedPositions })
+                  }
+                />
+              )}
 
               <div className="space-y-1.5">
                 <Label className="text-white/90">Category</Label>
