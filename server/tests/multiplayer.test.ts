@@ -333,6 +333,31 @@ describe("multiplayer over sockets", () => {
     expect(room.round!.phase).toBe("round-end");
   });
 
+  it("engine-level: word master rotation is fair in mixed mode with 2 players", async () => {
+    const room = createRoom(
+      { id: "mix-host", name: "A" },
+      { rounds: 4, mode: "mixed", playerRounds: 2 }
+    );
+    addPlayer(room, "mix-host", "A");
+    addPlayer(room, "mix-p2", "B");
+    const ctx = testCtx();
+
+    startMatch(ctx, room);
+    // R1 = system, R2 = player (master A), R3 = system, R4 = player (master B)
+    expect(room.round!.kind).toBe("system");
+
+    beginRound(ctx, room, 2);
+    expect(room.round!.kind).toBe("player");
+    expect(room.round!.wordMasterId).toBe("mix-host"); // first player hosts round 2
+
+    beginRound(ctx, room, 3);
+    expect(room.round!.kind).toBe("system");
+
+    beginRound(ctx, room, 4);
+    expect(room.round!.kind).toBe("player");
+    expect(room.round!.wordMasterId).toBe("mix-p2"); // second player gets their turn
+  });
+
   it("engine-level: rate limiting blocks rapid-fire guesses", async () => {
     const room = createRoom({ id: "h5", name: "A" }, { rounds: 1 });
     addPlayer(room, "h5", "A");

@@ -143,12 +143,17 @@ function planRoundKinds(room: ServerRoom): RoundKind[] {
   return kinds;
 }
 
-function nextWordMasterId(room: ServerRoom, roundNumber: number): string | undefined {
+function nextWordMasterId(room: ServerRoom, _roundNumber: number): string | undefined {
   const eligible = room.players;
   if (eligible.length === 0) return undefined;
-  // Rotate through players in join order; everyone goes before anyone repeats.
-  const idx = (roundNumber - 1) % eligible.length;
-  return eligible[idx].id;
+  // Rotate per PLAYER-round, not per round number. In mixed mode player rounds
+  // are always even-numbered, so a round-number index would hand every turn to
+  // the same player (e.g. with 2 players: (2-1)%2 = 1, (4-1)%2 = 1 ...).
+  const anyRoom = room as ServerRoom & { __wmIndex?: number };
+  if (typeof anyRoom.__wmIndex !== "number") anyRoom.__wmIndex = 0;
+  const id = eligible[anyRoom.__wmIndex % eligible.length].id;
+  anyRoom.__wmIndex = (anyRoom.__wmIndex + 1) % eligible.length;
+  return id;
 }
 
 export function startMatch(ctx: EngineContext, room: ServerRoom) {
@@ -157,6 +162,8 @@ export function startMatch(ctx: EngineContext, room: ServerRoom) {
 
   room.started = true;
   room.summary = null;
+  // Fair Word Master rotation starts from the first player each match.
+  (room as ServerRoom & { __wmIndex?: number }).__wmIndex = 0;
   room.players.forEach((p) => {
     p.score = 0;
     p.wordsCreated = 0;
@@ -807,6 +814,7 @@ export function resetForRematch(room: ServerRoom) {
   room.summary = null;
   (room as ServerRoom & { __wmWords?: Map<string, Set<string>> }).__wmWords?.clear();
   (room as ServerRoom & { __usedWords?: Set<string> }).__usedWords?.clear();
+  (room as ServerRoom & { __wmIndex?: number }).__wmIndex = 0;
   getComboMap(room).clear();
   (room as ServerRoom & { __revealSet?: Set<number> }).__revealSet?.clear();
   room.players.forEach((p) => {
