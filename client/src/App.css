@@ -1,0 +1,83 @@
+/* Mobile-first styles */
+#root {
+  width: 100%;
+  min-height: 100dvh;
+  margin: 0;
+  padding: 0;
+}
+
+/* Ensure proper touch targets on mobile */
+@media (max-width: 640px) {
+  button, [role="button"] {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
+/* Smooth animations */
+.animate-fly {
+  animation: fly 0.3s ease-out;
+}
+
+@keyframes fly {
+  0% {
+    transform: translate(0, 0) scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: translate(var(--fly-x, 0), var(--fly-y, -20px)) scale(1.2);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(var(--fly-x, 0), var(--fly-y, 0)) scale(1);
+    opacity: 1;
+  }
+}
+
+/* Explosion ripple effect */
+.animate-explode {
+  animation: explode 0.4s ease-out;
+}
+
+@keyframes explode {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.7);
+  }
+  50% {
+    transform: scale(1.3);
+    box-shadow: 0 0 20px 10px rgba(255, 255, 255, 0.3);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(255, 255, 255, 0);
+  }
+}
+
+/* Capture flash effect */
+.animate-capture {
+  animation: capture 0.3s ease-out;
+}
+
+@keyframes capture {
+  0% {
+    background-color: rgba(255, 255, 255, 0.5);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+/* Pulse for cells about to explode */
+.pulse-warning {
+  animation: pulse-warning 1s ease-in-out infinite;
+}
+
+@keyframes pulse-warning {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 12px 4px rgba(255, 255, 255, 0.2);
+  }
+}
