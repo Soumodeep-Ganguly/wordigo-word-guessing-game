@@ -399,13 +399,23 @@ describe("multiplayer over sockets", () => {
     expect(tooMany.ok).toBe(false);
     expect(tooMany.error).toMatch(/at least 2/i);
 
-    // Max for a 3-letter word is 0 — any pick rejected.
-    expect(maxRevealablePositions(3)).toBe(0);
-    const tiny = validateChallenge(
+    // A 3-letter word can reveal exactly 1 (2 stay hidden); a 2-letter word 0.
+    expect(maxRevealablePositions(3)).toBe(1);
+    expect(maxRevealablePositions(2)).toBe(0);
+    const tinyOk = validateChallenge(
       { word: "CAT", category: "Animals", difficulty: "Easy", hint1: "a pet", revealedPositions: [0] },
       prev
     );
-    expect(tiny.ok).toBe(false);
+    expect(tinyOk.ok).toBe(true);
+    const tinyOver = validateChallenge(
+      { word: "CAT", category: "Animals", difficulty: "Easy", hint1: "a pet", revealedPositions: [0, 1] },
+      prev
+    );
+    expect(tinyOver.ok).toBe(false);
+    expect(tinyOver.error).toMatch(/at least 2/i);
+
+    // Hard cap of 3, even for very long words (15 letters → still 3).
+    expect(maxRevealablePositions(15)).toBe(3);
   });
 
   it("engine-level: word master picks which letters are visible at start", async () => {

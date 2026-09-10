@@ -20,9 +20,9 @@ export interface ValidationResult {
 const WORD_MIN_LEN = 3;
 const WORD_MAX_LEN = 15;
 const HINT_MAX_LEN = 120;
-/** How many letters the Word Master may pre-reveal: max half the word, always keeping 2 hidden. */
+/** How many letters the Word Master may pre-reveal: up to 3, always keeping at least 2 hidden. */
 export function maxRevealablePositions(wordLength: number): number {
-  return Math.max(0, Math.floor(wordLength / 2) - 1);
+  return Math.max(0, Math.min(3, wordLength - 2));
 }
 const CATEGORIES = [
   "Animals", "Food", "Movies", "Sports", "Countries",

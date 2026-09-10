@@ -8,10 +8,10 @@ interface StartingLettersPickerProps {
 
 /**
  * Max starting letters the Word Master may reveal — matches the server rule:
- * at most half the word minus one, so at least 2 letters always stay hidden.
+ * up to 3, so long as at least 2 letters always stay hidden.
  */
 export function maxRevealablePositions(wordLength: number): number {
-  return Math.max(0, Math.floor(wordLength / 2) - 1);
+  return Math.max(0, Math.min(3, wordLength - 2));
 }
 
 /**
