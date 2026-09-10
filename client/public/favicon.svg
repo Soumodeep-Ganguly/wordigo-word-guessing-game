@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Wordigo favicon: app gradient + word-mark W -->
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#4f46e5"/>
+      <stop offset="0.55" stop-color="#a855f7"/>
+      <stop offset="1" stop-color="#d946ef"/>
+    </linearGradient>
+  </defs>
+  <rect x="1" y="1" width="62" height="62" rx="14" fill="url(#g)"/>
+  <path d="M16 18 L24 46 L32 26 L40 46 L48 18" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
